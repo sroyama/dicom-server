@@ -1,9 +1,10 @@
-﻿// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // -------------------------------------------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -84,6 +85,7 @@ public partial class DicomWebClient : IDicomWebClient
         string sopInstanceUid,
         string dicomTransferSyntax = DicomWebConstants.OriginalDicomTransferSyntax,
         string partitionName = default,
+        bool acceptMultipart = default,
         CancellationToken cancellationToken = default)
     {
         EnsureArg.IsNotNullOrWhiteSpace(studyInstanceUid, nameof(studyInstanceUid));
@@ -93,6 +95,7 @@ public partial class DicomWebClient : IDicomWebClient
         return await RetrieveInstanceAsync(
             GenerateRequestUri(string.Format(CultureInfo.InvariantCulture, DicomWebConstants.BaseInstanceUriFormat, studyInstanceUid, seriesInstanceUid, sopInstanceUid), partitionName),
             dicomTransferSyntax,
+            acceptMultipart,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -145,6 +148,7 @@ public partial class DicomWebClient : IDicomWebClient
         string sopInstanceUid,
         int frame,
         string partitionName = default,
+        bool acceptMultipart = default,
         CancellationToken cancellationToken = default)
     {
         EnsureArg.IsNotNullOrWhiteSpace(studyInstanceUid, nameof(studyInstanceUid));
@@ -163,7 +167,11 @@ public partial class DicomWebClient : IDicomWebClient
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.TryAddWithoutValidation(
             "Accept",
-            CreateAcceptHeader(DicomWebConstants.MediaTypeApplicationOctetStream, DicomWebConstants.OriginalDicomTransferSyntax));
+            CreateAcceptHeader(
+                acceptMultipart ? CreateMultipartMediaTypeHeader(DicomWebConstants.ApplicationOctetStreamMediaType)
+                : DicomWebConstants.MediaTypeApplicationOctetStream,
+                DicomWebConstants.OriginalDicomTransferSyntax)
+            );
 
         HttpResponseMessage response = await HttpClient.SendAsync(request, cancellationToken)
             .ConfigureAwait(false);
@@ -173,16 +181,31 @@ public partial class DicomWebClient : IDicomWebClient
             response,
             async content =>
             {
-                MemoryStream memoryStream = GetMemoryStream();
-                await content.CopyToAsync(memoryStream).ConfigureAwait(false);
-                memoryStream.Seek(0, SeekOrigin.Begin);
-                return memoryStream;
+                if (acceptMultipart)
+                {
+                    IAsyncEnumerable<Stream> enumerable = await RetrieveFramesAsync(
+                        requestUri,
+                        DicomWebConstants.ApplicationOctetStreamMediaType,
+                        DicomWebConstants.OriginalDicomTransferSyntax,
+                        cancellationToken);
+                    IAsyncEnumerator<Stream> enumerator = enumerable.GetAsyncEnumerator();
+                    await enumerator.MoveNextAsync();
+                    return enumerator.Current;
+                }
+                else
+                {
+                    MemoryStream memoryStream = GetMemoryStream();
+                    await content.CopyToAsync(memoryStream).ConfigureAwait(false);
+                    memoryStream.Seek(0, SeekOrigin.Begin);
+                    return memoryStream;
+                }
             });
     }
 
     private async Task<DicomWebResponse<DicomFile>> RetrieveInstanceAsync(
         Uri requestUri,
         string dicomTransferSyntax,
+        bool acceptMultiPart,
         CancellationToken cancellationToken)
     {
         EnsureArg.IsNotNull(requestUri, nameof(requestUri));
@@ -191,7 +214,10 @@ public partial class DicomWebClient : IDicomWebClient
 
         request.Headers.TryAddWithoutValidation(
             "Accept",
-            CreateAcceptHeader(DicomWebConstants.MediaTypeApplicationDicom, dicomTransferSyntax));
+            CreateAcceptHeader(
+                acceptMultiPart ? CreateMultipartMediaTypeHeader(DicomWebConstants.ApplicationDicomMediaType)
+                : DicomWebConstants.MediaTypeApplicationDicom, dicomTransferSyntax)
+            );
 
         HttpResponseMessage response = await HttpClient.SendAsync(request, cancellationToken)
             .ConfigureAwait(false);
@@ -202,11 +228,20 @@ public partial class DicomWebClient : IDicomWebClient
             response,
             async content =>
             {
-                MemoryStream memoryStream = GetMemoryStream();
-                await content.CopyToAsync(memoryStream).ConfigureAwait(false);
-                memoryStream.Seek(0, SeekOrigin.Begin);
+                if (acceptMultiPart)
+                {
+                    IAsyncEnumerator<DicomFile> enumerator = ReadMultipartResponseAsDicomFileAsync(content, cancellationToken).GetAsyncEnumerator();
+                    await enumerator.MoveNextAsync();
+                    return enumerator.Current;
+                }
+                else
+                {
+                    MemoryStream memoryStream = GetMemoryStream();
+                    await content.CopyToAsync(memoryStream).ConfigureAwait(false);
+                    memoryStream.Seek(0, SeekOrigin.Begin);
 
-                return await DicomFile.OpenAsync(memoryStream).ConfigureAwait(false);
+                    return await DicomFile.OpenAsync(memoryStream).ConfigureAwait(false);
+                }
             });
     }
 
