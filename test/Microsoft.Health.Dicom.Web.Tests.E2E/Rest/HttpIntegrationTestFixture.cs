@@ -24,9 +24,12 @@ public class HttpIntegrationTestFixture<TStartup> : IDisposable
         : this(TestServerFeatureSettingType.None)
     { }
 
-    protected HttpIntegrationTestFixture(TestServerFeatureSettingType featureSettingType)
+    protected HttpIntegrationTestFixture(TestServerFeatureSettingType featureSettingType) : this(new[] { featureSettingType })
+    { }
+
+    protected HttpIntegrationTestFixture(TestServerFeatureSettingType[] featureSettingTypes)
     {
-        TestDicomWebServer = TestDicomWebServerFactory.GetTestDicomWebServer(typeof(TStartup), featureSettingType);
+        TestDicomWebServer = TestDicomWebServerFactory.GetTestDicomWebServer(typeof(TStartup), featureSettingTypes);
     }
 
     public bool IsInProcess => TestDicomWebServer is InProcTestDicomWebServer;
@@ -35,12 +38,12 @@ public class HttpIntegrationTestFixture<TStartup> : IDisposable
 
     public RecyclableMemoryStreamManager RecyclableMemoryStreamManager { get; } = new RecyclableMemoryStreamManager();
 
-    public IDicomWebClient GetDicomWebClient()
+    public IDicomWebClient GetDicomWebClient(string apiVersion = DicomApiVersions.V1)
     {
-        return GetDicomWebClient(TestApplications.GlobalAdminServicePrincipal);
+        return GetDicomWebClient(TestApplications.GlobalAdminServicePrincipal, apiVersion: apiVersion);
     }
 
-    public IDicomWebClient GetDicomWebClient(TestApplication clientApplication, TestUser testUser = null)
+    public IDicomWebClient GetDicomWebClient(TestApplication clientApplication, TestUser testUser = null, string apiVersion = DicomApiVersions.V1)
     {
         EnsureArg.IsNotNull(clientApplication, nameof(clientApplication));
         HttpMessageHandler messageHandler = TestDicomWebServer.CreateMessageHandler();
@@ -92,7 +95,7 @@ public class HttpIntegrationTestFixture<TStartup> : IDisposable
 
         var httpClient = new HttpClient(messageHandler) { BaseAddress = TestDicomWebServer.BaseAddress };
 
-        var dicomWebClient = new DicomWebClient(httpClient, DicomApiVersions.V1)
+        var dicomWebClient = new DicomWebClient(httpClient, apiVersion)
         {
             GetMemoryStream = () => RecyclableMemoryStreamManager.GetStream(),
         };

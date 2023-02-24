@@ -74,7 +74,6 @@
             "DicomFunctions__ConnectionName": "AzureWebJobsStorage",
             "DicomServer__Security__Enabled": "true",
             "DicomServer__Security__Authorization__Enabled": "true",
-            "DicomServer__Services__BlobMigration__FormatType": "New",
             "DicomServer__Security__Authentication__Authority": "[parameters('securityAuthenticationAuthority')]",
             "DicomServer__Security__Authentication__Audience": "[parameters('securityAuthenticationAudience')]",
             "KeyVault__Endpoint": "[variables('keyVaultEndpoint')]"
@@ -127,7 +126,7 @@
                         "[resourceId('Microsoft.Web/sites/config', variables('featuresEnabledServiceName'), 'appsettings')]" // Avoid restarts mid-installation
                     ],
                     "properties": {
-                        "version": "7.0.1"
+                        "version": "7.0.3"
                     }
                 }
             ]

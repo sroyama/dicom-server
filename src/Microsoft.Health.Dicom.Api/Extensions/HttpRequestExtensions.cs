@@ -21,9 +21,7 @@ public static class HttpRequestExtensions
         IList<MediaTypeHeaderValue> acceptHeaders = httpRequest.GetTypedHeaders().Accept;
 
         return acceptHeaders?.Count > 0
-            ? acceptHeaders
-                .Select((item) => item.ToAcceptHeader())
-                .ToList()
+            ? acceptHeaders.Select(item => item.ToAcceptHeader()).ToList()
             : Array.Empty<AcceptHeader>();
     }
 

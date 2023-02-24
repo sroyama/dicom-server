@@ -70,11 +70,9 @@ public static class RetrieveRequestValidator
 
     public static void ValidateFrames(IReadOnlyCollection<int> frames)
     {
-        if (frames == null || frames.Count == 0)
+        if (frames == null || frames.Count == 0 || frames.Any(x => x < 0))
             throw new BadRequestException(DicomCoreResource.InvalidFramesValue);
 
-        if (frames.Any(x => x < 0))
-            throw new BadRequestException(DicomCoreResource.InvalidFramesValue);
     }
 
     public static void ValidateTransferSyntax(string requestedTransferSyntax, bool originalTransferSyntaxRequested = false)
